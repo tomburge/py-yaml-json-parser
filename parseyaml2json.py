@@ -1,4 +1,5 @@
 # Author: Tom Burge
+# Contributor: Anthon van der Neut - Thanks for the help!
 # Title: py-yaml-json-parser
 # Description: Simple Menu-Based YAML/JSON Parser
 # Requirements:
@@ -11,8 +12,19 @@ from collections import OrderedDict
 import ruamel.yaml
 from ruamel.yaml.error import YAMLError
 from ruamel.yaml.comments import CommentedMap
+from ruamel.yaml.scalarstring import PreservedScalarString
+from ruamel.yaml.compat import string_types, MutableMapping, MutableSequence
 
 yaml = ruamel.yaml.YAML()
+
+
+class OrderlyJSONEncoder(json.JSONEncoder):
+    def default(self, o):
+        if isinstance(o, Mapping):
+            return OrderedDict(o)
+        elif isinstance(o, Sequence):
+            return list(o)
+        return json.JSONEncoder.default(self, o)
 
 
 def printmenu():
@@ -23,13 +35,26 @@ def printmenu():
     print(menu)
 
 
-class OrderlyJSONEncoder(json.JSONEncoder):
-    def default(self, o):
-        if isinstance(o, Mapping):
-            return OrderedDict(o)
-        elif isinstance(o, Sequence):
-            return list(o)
-        return json.JSONEncoder.default(self, o)
+def preserve_literal(s):
+    # type: (Text) -> Text
+    print('converting')
+    return PreservedScalarString(s.replace('\r\n', '\n').replace('\r', '\n'))
+
+
+def walk_tree(base):
+    if isinstance(base, MutableMapping):
+        for k in base:
+            v = base[k]  # type: Text
+            if isinstance(v, string_types) and '\n' in v:
+                base[k] = preserve_literal(v)
+            else:
+                walk_tree(v)
+    elif isinstance(base, MutableSequence):
+        for idx, elem in enumerate(base):
+            if isinstance(elem, string_types) and '\n' in elem:  # type: ignore
+                base[idx] = preserve_literal(elem)  # type: ignore
+            else:
+                walk_tree(elem)
 
 
 def parseyaml(intype, outtype):
@@ -54,12 +79,12 @@ def parsejson(intype, outtype):
     with open(infile, 'r') as stream:
         try:
             datamap = json.load(stream, object_pairs_hook=CommentedMap)
+            ruamel.yaml.scalarstring.walk_tree(datamap)
             with open(outfile, 'w') as output:
                 yaml.dump(datamap, output)
         except YAMLError as exc:
             print(exc)
             return False
-
     print('Your file has been parsed.\n\n')
 
 

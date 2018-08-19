@@ -2,11 +2,17 @@
 # Title: py-yaml-json-parser
 # Description: Simple Menu-Based YAML/JSON Parser
 # Requirements:
-#   - PyYAML (pip install pyyaml)
+#   - Ruamel.YAML (pip install ruamel.yaml
 
 import json
-import yaml
 import sys
+from collections.abc import Mapping, Sequence
+from collections import OrderedDict
+import ruamel.yaml
+from ruamel.yaml.error import YAMLError
+from ruamel.yaml.comments import CommentedMap
+
+yaml = ruamel.yaml.YAML()
 
 
 def printmenu():
@@ -17,18 +23,27 @@ def printmenu():
     print(menu)
 
 
+class OrderlyJSONEncoder(json.JSONEncoder):
+    def default(self, o):
+        if isinstance(o, Mapping):
+            return OrderedDict(o)
+        elif isinstance(o, Sequence):
+            return list(o)
+        return json.JSONEncoder.default(self, o)
+
+
 def parseyaml(intype, outtype):
     infile = input('Please enter a {} filename to parse: '.format(intype))
     outfile = input('Please enter a {} filename to output: '.format(outtype))
 
     with open(infile, 'r') as stream:
         try:
-            datamap = yaml.safe_load(stream)
+            datamap = yaml.load(stream)
             with open(outfile, 'w') as output:
-                json.dump(datamap, output)
-        except yaml.YAMLError as exc:
+                output.write(OrderlyJSONEncoder(indent=2).encode(datamap))
+        except YAMLError as exc:
             print(exc)
-
+            return False
     print('Your file has been parsed.\n\n')
 
 
@@ -38,11 +53,12 @@ def parsejson(intype, outtype):
 
     with open(infile, 'r') as stream:
         try:
-            datamap = json.load(stream)
+            datamap = json.load(stream, object_pairs_hook=CommentedMap)
             with open(outfile, 'w') as output:
                 yaml.dump(datamap, output)
-        except yaml.YAMLError as exc:
+        except YAMLError as exc:
             print(exc)
+            return False
 
     print('Your file has been parsed.\n\n')
 

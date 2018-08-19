@@ -12,7 +12,7 @@ from collections import OrderedDict
 import ruamel.yaml
 from ruamel.yaml.error import YAMLError
 from ruamel.yaml.comments import CommentedMap
-from ruamel.yaml.scalarstring import PreservedScalarString
+from ruamel.yaml.scalarstring import PreservedScalarString, SingleQuotedScalarString
 from ruamel.yaml.compat import string_types, MutableMapping, MutableSequence
 
 yaml = ruamel.yaml.YAML()
@@ -36,8 +36,6 @@ def printmenu():
 
 
 def preserve_literal(s):
-    # type: (Text) -> Text
-    print('converting')
     return PreservedScalarString(s.replace('\r\n', '\n').replace('\r', '\n'))
 
 
@@ -45,17 +43,22 @@ def walk_tree(base):
     if isinstance(base, MutableMapping):
         for k in base:
             v = base[k]  # type: Text
-            if isinstance(v, string_types) and '\n' in v:
-                base[k] = preserve_literal(v)
+            if isinstance(v, string_types):
+                if '\n' in v:
+                    base[k] = preserve_literal(v)
+                elif '${' in v or ':' in v:
+                    base[k] = SingleQuotedScalarString(v)
             else:
                 walk_tree(v)
     elif isinstance(base, MutableSequence):
         for idx, elem in enumerate(base):
-            if isinstance(elem, string_types) and '\n' in elem:  # type: ignore
-                base[idx] = preserve_literal(elem)  # type: ignore
+            if isinstance(elem, string_types):
+                if '\n' in elem:
+                    base[idx] = preserve_literal(elem)
+                elif '${' in elem or ':' in elem:
+                    base[idx] = SingleQuotedScalarString(elem)
             else:
                 walk_tree(elem)
-
 
 def parseyaml(intype, outtype):
     infile = input('Please enter a {} filename to parse: '.format(intype))
@@ -79,7 +82,7 @@ def parsejson(intype, outtype):
     with open(infile, 'r') as stream:
         try:
             datamap = json.load(stream, object_pairs_hook=CommentedMap)
-            ruamel.yaml.scalarstring.walk_tree(datamap)
+            walk_tree(datamap)
             with open(outfile, 'w') as output:
                 yaml.dump(datamap, output)
         except YAMLError as exc:
